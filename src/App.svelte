@@ -1,10 +1,22 @@
 <script>
-  // App entry point - dice simulator skeleton
+  import NavBar from './components/NavBar.svelte'
+  import RollScreen from './screens/RollScreen.svelte'
+  import ConfigScreen from './screens/ConfigScreen.svelte'
+
+  let screen = $state('roll') // 'roll' | 'config'
 </script>
 
-<main>
-  <h1>Hello</h1>
-</main>
+<NavBar
+  title={screen === 'roll' ? 'Dice' : 'Settings'}
+  action={screen === 'roll' ? 'Config' : 'Back'}
+  onAction={() => (screen = screen === 'roll' ? 'config' : 'roll')}
+/>
+
+{#if screen === 'roll'}
+  <RollScreen />
+{:else}
+  <ConfigScreen />
+{/if}
 
 <style>
   :global(*) {
@@ -25,18 +37,5 @@
     height: 100dvh;
     display: flex;
     flex-direction: column;
-  }
-
-  main {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  h1 {
-    font-size: 2.5rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
   }
 </style>

@@ -1,0 +1,9 @@
+# Specs
+
+There should be a main screen with a roll dice button that will put on the screen the dice rolled. 
+Next to each dice rolled should be a set of buttons.
+These will allow you to mark the dice to be locked so that when you reroll them, the locked ones dont reload. You should also be able to mark the dice that it was used. This is just a visual representation that will allow the user to know that he used the dice.
+
+We need a config screen where the user can choose how many dice they want to roll, how many sides for the different dice and if they want to color code the different dice.
+
+
