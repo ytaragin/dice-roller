@@ -9,7 +9,9 @@ see [`README.md`](./README.md).
 A mobile-first dice roller PWA. The user configures a set of dice (how many, how
 many sides each, and whether to color-code them), then rolls them on the main
 screen. Individual dice can be **locked** (kept on reroll) or marked **used**
-(a purely visual flag).
+(a purely visual flag). Dice configurations can be saved as named **presets**
+("games") and switched back in quickly; editing dice drops to a one-off
+"Custom" configuration.
 
 ## Tech stack
 
@@ -47,6 +49,7 @@ src/
 │
 ├── state/                     # reactive stores (Svelte 5 runes in .svelte.js)
 │   ├── config.svelte.js       #   per-die definitions + colorCoded (+ persistence)
+│   ├── presets.svelte.js      #   named dice presets + active selection (+ persistence)
 │   └── dice.svelte.js         #   dice array + roll / reroll / lock / used
 │
 ├── screens/
@@ -55,6 +58,7 @@ src/
 │
 └── components/
     ├── NavBar.svelte          # header + screen switch button
+    ├── PresetBar.svelte       # preset selector + save/delete at top of ConfigScreen
     ├── DiceTray.svelte        # responsive grid layout of dice
     ├── Die.svelte             # ONE die: value + lock button + used button
     └── DieConfigRow.svelte    # one editable row in ConfigScreen
@@ -73,7 +77,8 @@ no `createEventDispatcher`).
 | `RollScreen.svelte` | nothing (reads stores) | Roll/Reroll button → `DiceTray` |
 | `DiceTray.svelte` | nothing | grid of `Die`, one per die in store |
 | `Die.svelte` | nothing (one `die` prop + callbacks) | face value, lock toggle, used toggle, color |
-| `ConfigScreen.svelte` | nothing (reads config store) | color toggle, list of `DieConfigRow`, "add die" |
+| `ConfigScreen.svelte` | nothing (reads config + presets stores) | `PresetBar`, list of `DieConfigRow`, "add die" |
+| `PresetBar.svelte` | local save-name input state | preset dropdown, save-as / delete controls |
 | `DieConfigRow.svelte` | nothing (one die-def prop + callbacks) | sides selector + remove button |
 
 ## State & data model
@@ -98,9 +103,38 @@ class Config {
   addDie(sides = 6) { ... }        // append a die
   removeDie(id)     { ... }        // drop a die
   setSides(id, n)   { ... }        // change one die's faces
+  replaceDice(dice) { ... }        // swap the whole set (used when loading a preset)
 }
 export const config = new Config()   // singleton
 ```
+
+### Presets store — `state/presets.svelte.js`
+
+Named dice configurations ("games") the user can save and reload. Persisted to
+`localStorage` under its own key (`dice-presets`), separate from the live config.
+
+```js
+// one preset:
+{ id, name, dice: [{ sides, color }, ...] }
+
+class Presets {
+  presets  = $state([])            // saved presets
+  activeId = $state(null)          // selected preset id, or null = "Custom"
+
+  get active() { ... }             // the selected preset object, or null
+  select(id)        // load preset's dice into config + mark active
+  selectCustom()    // switch to Custom (keeps current dice)
+  markCustom()      // drop active selection because dice were edited
+  saveCurrentAs(name) // snapshot config.dice into a new named preset
+  remove(id)        // delete a preset; falls back to Custom if it was active
+}
+export const presets = new Presets()   // singleton
+```
+
+`activeId === null` means the live config is a one-off **Custom** setup not tied
+to any saved preset. Preset `id`s are stable within a session and are persisted
+only to round-trip the active selection across reloads; on load the active
+selection is restored only if it still resolves to an existing preset.
 
 ### Dice store — `state/dice.svelte.js`
 
@@ -132,7 +166,14 @@ The `id` on a runtime die is used only for keyed `{#each}` rendering and for
   shows locked style and survives the next reroll *within the session*.
 - **Used** → `Die` calls `onToggleUsed(id)` → `diceState.toggleUsed(id)` →
   die is dimmed/marked (purely visual).
-- **Config change** → user edits `config` → config persists → `diceState.rebuild()`.
+- **Config change** → user edits `config` → `presets.markCustom()` (drops to
+  Custom) → config persists → `diceState.rebuild()`.
+- **Select preset** → `PresetBar` calls `onSelect(id)` → `presets.select(id)`
+  loads the preset's dice into `config` → `diceState.rebuild()`.
+- **Save preset** → user names the current dice in `PresetBar` →
+  `presets.saveCurrentAs(name)` snapshots `config.dice` → new preset becomes active.
+- **Delete preset** → `PresetBar` calls `onDelete(id)` → `presets.remove(id)` →
+  selection falls back to Custom if the deleted preset was active.
 
 ## Config-change behavior
 
@@ -166,5 +207,11 @@ reconciliation.
 3. **Color-coding** is a single boolean. When on, each die gets a distinct color
    by position via `colors.colorForIndex(i)`; when off, all dice share a neutral
    color.
-4. **Persistence:** the config is saved to `localStorage` so the user's dice
-   setup survives reloads. The current roll/session state is not persisted.
+4. **Persistence:** the live config is saved to `localStorage` (`dice-config`) so
+   the user's dice setup survives reloads. Presets and the active selection are
+   saved under a separate key (`dice-presets`). The current roll/session state is
+   not persisted.
+5. **Presets vs. Custom.** Editing any die (sides/color/add/remove) calls
+   `presets.markCustom()`, so the live config detaches from the selected preset
+   instead of mutating it. A preset only changes when explicitly re-saved. This
+   keeps saved "games" stable while allowing quick one-off tweaks.

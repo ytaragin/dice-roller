@@ -2,6 +2,12 @@
 
 Svelte 5 + Vite PWA static site deployed to AWS S3 + CloudFront.
 
+## Architecture
+
+Before proposing a design or implementation plan, read [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+to follow the existing screens, stores, state model, and conventions. Keep it
+up to date when those structures change.
+
 ## Build
 
 ```bash
