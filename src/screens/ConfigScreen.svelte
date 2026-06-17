@@ -9,6 +9,11 @@
     diceState.rebuild()
   }
 
+  /** @param {string} id @param {string} color */
+  function setColor(id, color) {
+    config.setColor(id, color)
+  }
+
   /** @param {string} id */
   function removeDie(id) {
     config.removeDie(id)
@@ -22,13 +27,8 @@
 </script>
 
 <section>
-  <label class="color-toggle">
-    <input type="checkbox" bind:checked={config.colorCoded} />
-    Color-code dice
-  </label>
-
   {#each config.dice as die, i (die.id)}
-    <DieConfigRow {die} index={i} onSetSides={setSides} onRemove={removeDie} />
+    <DieConfigRow {die} index={i} onSetSides={setSides} onSetColor={setColor} onRemove={removeDie} />
   {/each}
 
   <button onclick={addDie}>+ Add die</button>
@@ -41,10 +41,5 @@
     flex-direction: column;
     gap: 0.5rem;
     padding: 1rem;
-  }
-  .color-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
   }
 </style>

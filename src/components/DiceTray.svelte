@@ -2,14 +2,13 @@
   import Die from './Die.svelte'
   import { diceState } from '../state/dice.svelte.js'
   import { config } from '../state/config.svelte.js'
-  import { colorForIndex } from '../lib/colors.js'
 </script>
 
 <div class="tray">
   {#each diceState.dice as die, i (die.id)}
     <Die
       {die}
-      color={config.colorCoded ? colorForIndex(i) : undefined}
+      color={config.dice[i]?.color}
       onToggleLock={(id) => diceState.toggleLock(id)}
       onToggleUsed={(id) => diceState.toggleUsed(id)}
     />
