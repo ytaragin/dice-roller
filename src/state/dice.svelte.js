@@ -27,7 +27,10 @@ class DiceState {
   /** Reroll every unlocked die; locked dice keep their value. */
   reroll() {
     for (const d of this.dice) {
-      if (!d.locked) d.value = rollDie(d.sides)
+      if (!d.locked) {
+        d.value = rollDie(d.sides)
+        d.used = false
+      }
     }
   }
 
