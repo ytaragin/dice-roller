@@ -54,6 +54,15 @@ class Config {
     this.dice.push(makeDie(sides))
   }
 
+  /**
+   * Replace the entire dice set (e.g. when loading a preset).
+   * New runtime ids are generated; incoming ids (if any) are ignored.
+   * @param {{ sides: number, color?: string }[]} dice
+   */
+  replaceDice(dice) {
+    this.dice = dice.map((d) => makeDie(d.sides, d.color || '#ffffff'))
+  }
+
   /** @param {string} id */
   removeDie(id) {
     this.dice = this.dice.filter((d) => d.id !== id)
