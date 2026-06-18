@@ -2,20 +2,30 @@
   import NavBar from './components/NavBar.svelte'
   import RollScreen from './screens/RollScreen.svelte'
   import ConfigScreen from './screens/ConfigScreen.svelte'
+  import StatsScreen from './screens/StatsScreen.svelte'
 
-  let screen = $state('roll') // 'roll' | 'config'
+  let screen = $state('roll') // 'roll' | 'config' | 'stats'
+
+  const titles = { roll: 'Dice', config: 'Settings', stats: 'Statistics' }
+
+  const actions = $derived(
+    screen === 'roll'
+      ? [
+          { label: 'Stats', onAction: () => (screen = 'stats') },
+          { label: 'Config', onAction: () => (screen = 'config') },
+        ]
+      : [{ label: 'Back', onAction: () => (screen = 'roll') }],
+  )
 </script>
 
-<NavBar
-  title={screen === 'roll' ? 'Dice' : 'Settings'}
-  action={screen === 'roll' ? 'Config' : 'Back'}
-  onAction={() => (screen = screen === 'roll' ? 'config' : 'roll')}
-/>
+<NavBar title={titles[screen]} {actions} />
 
 {#if screen === 'roll'}
   <RollScreen />
-{:else}
+{:else if screen === 'config'}
   <ConfigScreen />
+{:else}
+  <StatsScreen />
 {/if}
 
 <style>

@@ -1,18 +1,25 @@
 <script>
   /**
+   * @typedef {Object} Action
+   * @property {string} label - button text
+   * @property {() => void} onAction
+   *
    * @typedef {Object} Props
    * @property {string} title
-   * @property {string} action - label for the action button
-   * @property {() => void} onAction
+   * @property {Action[]} actions - one or more header buttons (right-aligned)
    */
 
   /** @type {Props} */
-  let { title, action, onAction } = $props()
+  let { title, actions } = $props()
 </script>
 
 <header>
   <h1>{title}</h1>
-  <button onclick={onAction}>{action}</button>
+  <nav>
+    {#each actions as a}
+      <button onclick={a.onAction}>{a.label}</button>
+    {/each}
+  </nav>
 </header>
 
 <style>
@@ -24,5 +31,9 @@
   }
   h1 {
     font-size: 1.25rem;
+  }
+  nav {
+    display: flex;
+    gap: 0.5rem;
   }
 </style>

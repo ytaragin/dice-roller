@@ -25,11 +25,16 @@ primitives to keep the bundle small and fully offline-capable.
 
 ## Screens & navigation
 
-Two screens, switched by a single `currentScreen` value (`'roll' | 'config'`)
-held in `App.svelte`. No router library.
+Three screens, switched by a single `screen` value
+(`'roll' | 'config' | 'stats'`) held in `App.svelte`. No router library. The
+roll screen shows two header buttons (**Stats** and **Config**); the other two
+screens show a single **Back** button that returns to roll.
 
 ```
-┌─────────────────┐        ┌─────────────────┐
+            ┌─────────────────┐
+   ┌─Stats─→│  Stats Screen   │─back─┐
+   │        └─────────────────┘      │
+┌──┴──────────────┐        ┌─────────▼───────┐
 │   Roll Screen   │ ─gear→ │  Config Screen  │
 │   (main view)   │ ←back─ │   (settings)    │
 └─────────────────┘        └─────────────────┘
@@ -50,11 +55,13 @@ src/
 ├── state/                     # reactive stores (Svelte 5 runes in .svelte.js)
 │   ├── config.svelte.js       #   per-die definitions + colorCoded (+ persistence)
 │   ├── presets.svelte.js      #   named dice presets + active selection (+ persistence)
+│   ├── stats.svelte.js        #   per-size roll counts + distribution (+ persistence)
 │   └── dice.svelte.js         #   dice array + roll / reroll / lock / used
 │
 ├── screens/
 │   ├── RollScreen.svelte      # main: roll button + dice tray
-│   └── ConfigScreen.svelte    # settings form (per-die editor)
+│   ├── ConfigScreen.svelte    # settings form (per-die editor)
+│   └── StatsScreen.svelte     # per-size roll distribution + reset button
 │
 └── components/
     ├── NavBar.svelte          # header + screen switch button
@@ -73,11 +80,12 @@ no `createEventDispatcher`).
 | Component | Owns | Renders |
 |---|---|---|
 | `App.svelte` | `currentScreen` state, global CSS | NavBar + active screen |
-| `NavBar.svelte` | nothing (callback props) | title + gear/back button |
+| `NavBar.svelte` | nothing (callback props) | title + one or more header buttons (`actions[]`) |
 | `RollScreen.svelte` | nothing (reads stores) | Roll/Reroll button → `DiceTray` |
 | `DiceTray.svelte` | nothing | grid of `Die`, one per die in store |
 | `Die.svelte` | nothing (one `die` prop + callbacks) | face value, lock toggle, used toggle, color |
 | `ConfigScreen.svelte` | nothing (reads config + presets stores) | `PresetBar`, list of `DieConfigRow`, "add die" |
+| `StatsScreen.svelte` | nothing (reads stats store) | per-size totals/average + per-face bar chart, reset button |
 | `PresetBar.svelte` | local save-name input state | preset dropdown, save-as / delete controls |
 | `DieConfigRow.svelte` | nothing (one die-def prop + callbacks) | sides selector + remove button |
 
@@ -176,13 +184,39 @@ class DiceState {
 export const diceState = new DiceState()
 ```
 
-The `id` on a runtime die is used only for keyed `{#each}` rendering and for
-`toggleLock(id)` / `toggleUsed(id)` within a session.
+### Stats store — `state/stats.svelte.js`
 
-## Data flow (key actions)
+Per-dice-size roll statistics. For each size we keep an array of per-face counts
+(index `value - 1`); totals, averages, and the distribution chart are all
+derived from it. Only explicit Roll/Reroll presses are recorded —
+`diceState.reroll()` calls `stats.record(sides, value)` for each unlocked die it
+rolls. Config rebuilds (`diceState.rebuild()`) deliberately do **not** count, so
+editing dice or loading a preset never inflates the numbers. Persisted to
+`localStorage` under its own key (`dice-stats`).
+
+```js
+class Stats {
+  bySize = $state({})        // { [sides]: number[] }  counts indexed by value-1
+
+  record(sides, value)       // increment one face's count
+  reset()                    // clear all statistics
+
+  get sizes()                // sizes with rolls, ascending
+  get isEmpty()              // true when nothing recorded
+  countsFor(sides)           // per-face counts array
+  totalFor(sides)            // total rolls for a size
+  averageFor(sides)          // mean face value
+  maxCountFor(sides)         // highest single-face count (chart scaling)
+}
+export const stats = new Stats()   // singleton
+```
+
+The persisted blob is `{ version: 1, bySize }`. Invalid/corrupt blobs are
+ignored on load.
 
 - **Roll / Reroll** → `RollScreen` calls `diceState.reroll()` → for each die, if
-  `locked` keep `value`, else `value = rollDie(die.sides)` → tray re-renders.
+  `locked` keep `value`, else `value = rollDie(die.sides)` and
+  `stats.record(die.sides, value)` → tray re-renders.
 - **Lock** → `Die` calls `onToggleLock(id)` → `diceState.toggleLock(id)` → die
   shows locked style and survives the next reroll *within the session*.
 - **Used** → `Die` calls `onToggleUsed(id)` → `diceState.toggleUsed(id)` →
@@ -230,8 +264,8 @@ reconciliation.
    color.
 4. **Persistence:** the live config is saved to `localStorage` (`dice-config`) so
    the user's dice setup survives reloads. Presets and the active selection are
-   saved under a separate key (`dice-presets`). The current roll/session state is
-   not persisted.
+   saved under a separate key (`dice-presets`). Roll statistics are saved under
+   their own key (`dice-stats`). The current roll/session state is not persisted.
 5. **Presets vs. Custom.** Editing any die (sides/color/add/remove) calls
    `presets.markCustom()`, so the live config detaches from the selected preset
    instead of mutating it. A preset only changes when explicitly re-saved. This

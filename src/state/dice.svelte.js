@@ -1,5 +1,6 @@
 import { config } from './config.svelte.js'
 import { rollDie } from '../lib/rng.js'
+import { stats } from './stats.svelte.js'
 
 /**
  * The runtime dice shown on the roll screen.
@@ -30,6 +31,7 @@ class DiceState {
       if (!d.locked) {
         d.value = rollDie(d.sides)
         d.used = false
+        stats.record(d.sides, d.value)
       }
     }
   }
