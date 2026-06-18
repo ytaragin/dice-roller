@@ -88,6 +88,14 @@ class Presets {
   /** @type {string | null} */
   activeId = $state(null)
 
+  /**
+   * Snapshot of the last one-off "Custom" dice setup, remembered so the user
+   * can switch to a preset and back without losing their custom config.
+   * Empty until the user has been in Custom mode at least once. Persisted.
+   * @type {{ sides: number, color: string }[]}
+   */
+  customDice = $state([])
+
   constructor() {
     const saved = load(KEY)
     if (isValidBlob(saved)) {
@@ -104,6 +112,12 @@ class Presets {
       this.hiddenBuiltins = Array.isArray(saved.hiddenBuiltins)
         ? saved.hiddenBuiltins.filter((/** @type {any} */ k) => typeof k === 'string')
         : []
+      if (Array.isArray(saved.customDice) && saved.customDice.every(isValidDie)) {
+        this.customDice = saved.customDice.map((/** @type {any} */ d) => ({
+          sides: d.sides,
+          color: d.color || '#ffffff',
+        }))
+      }
       // Only restore the active selection if it still resolves to a real
       // preset. Built-in selections round-trip by their stable key; user
       // preset ids are regenerated, so match by index into the saved list.
@@ -126,6 +140,7 @@ class Presets {
             version: 2,
             activeId: this.activeId,
             hiddenBuiltins: this.hiddenBuiltins,
+            customDice: this.customDice.map((d) => ({ sides: d.sides, color: d.color })),
             userPresets: this.userPresets.map((p) => ({
               id: p.id,
               name: p.name,
@@ -164,12 +179,18 @@ class Presets {
   select(id) {
     const preset = this.presets.find((p) => p.id === id)
     if (!preset) return
+    // Leaving Custom: remember the current dice so we can restore them later.
+    if (this.activeId === null) this.customDice = snapshotDice()
     config.replaceDice(preset.dice)
     this.activeId = id
   }
 
-  /** Switch to a one-off custom configuration, keeping the current dice. */
+  /**
+   * Switch to a one-off custom configuration. Restores the last remembered
+   * Custom dice if there is a snapshot; otherwise keeps the current dice.
+   */
   selectCustom() {
+    if (this.customDice.length) config.replaceDice(this.customDice)
     this.activeId = null
   }
 

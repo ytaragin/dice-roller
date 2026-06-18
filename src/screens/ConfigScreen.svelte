@@ -39,6 +39,7 @@
 
   function selectCustom() {
     presets.selectCustom()
+    diceState.rebuild()
   }
 
   /** @param {string} name */

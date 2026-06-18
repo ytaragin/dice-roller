@@ -135,12 +135,13 @@ class Presets {
   userPresets    = $state([])      // saved presets (persisted)
   hiddenBuiltins = $state([])      // keys of deleted built-ins (persisted)
   activeId       = $state(null)    // selected preset id, or null = "Custom"
+  customDice     = $state([])      // last one-off Custom dice (persisted)
 
   get presets()           // userPresets first, then non-hidden built-ins
   get active() { ... }    // the selected preset object, or null
   get hasHiddenBuiltins() // any built-in currently hidden?
-  select(id)        // load preset's dice into config + mark active
-  selectCustom()    // switch to Custom (keeps current dice)
+  select(id)        // remember current dice if Custom, then load preset's dice + mark active
+  selectCustom()    // restore last remembered Custom dice (if any), mark Custom
   markCustom()      // drop active selection because dice were edited
   saveCurrentAs(name) // snapshot config.dice into a new user preset
   remove(id)        // built-in → hide it; user preset → delete it
@@ -150,11 +151,17 @@ export const presets = new Presets()   // singleton
 ```
 
 `activeId === null` means the live config is a one-off **Custom** setup not tied
-to any saved preset. User preset `id`s are regenerated each load; built-in
+to any saved preset. When the user switches away from Custom to a preset,
+`select()` first snapshots the live dice into `customDice`; switching back via
+`selectCustom()` restores that snapshot, so an in-progress Custom setup survives
+a round-trip through presets. `customDice` is empty until the user has been in
+Custom mode at least once (then `selectCustom()` just keeps the current dice).
+User preset `id`s are regenerated each load; built-in
 selections round-trip by their stable `key`. The active selection is restored on
 load only if it still resolves to an existing preset. The persisted blob is
-`{ version: 2, activeId, hiddenBuiltins, userPresets }`; legacy v1 blobs
-(`{ version: 1, presets }`) are migrated so all entries become user presets.
+`{ version: 2, activeId, hiddenBuiltins, customDice, userPresets }`; legacy v1
+blobs (`{ version: 1, presets }`) are migrated so all entries become user
+presets.
 
 
 ### Dice store — `state/dice.svelte.js`
