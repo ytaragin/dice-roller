@@ -1,7 +1,14 @@
 import { load, save } from '../lib/storage.js'
 import { config } from './config.svelte.js'
+import { builtinPresets } from '../lib/builtinPresets.js'
 
 const KEY = 'dice-presets'
+
+/**
+ * Prefix for built-in preset runtime ids, keeping them in a separate namespace
+ * from user preset ids (`pN`) so the two can never collide.
+ */
+const BUILTIN_PREFIX = 'builtin:'
 
 let nextId = 0
 const makeId = () => `p${nextId++}`
@@ -19,34 +26,64 @@ const snapshotDice = () => config.dice.map((d) => ({ sides: d.sides, color: d.co
 const isValidDie = (d) => d && Number.isInteger(d.sides) && d.sides >= 2
 
 /**
+ * Validate that an array looks like a list of persisted presets.
+ * @param {any} list
+ * @returns {boolean}
+ */
+const isValidPresetList = (list) =>
+  Array.isArray(list) &&
+  list.every(
+    (p) =>
+      p &&
+      typeof p.name === 'string' &&
+      Array.isArray(p.dice) &&
+      p.dice.every(isValidDie),
+  )
+
+/**
  * Validate a persisted presets blob before trusting it.
+ * Supports the current shape (`userPresets` + `hiddenBuiltins`) and the
+ * legacy v1 shape (`presets`).
  * @param {any} saved
  * @returns {boolean}
  */
 function isValidBlob(saved) {
-  return (
-    !!saved &&
-    typeof saved === 'object' &&
-    Array.isArray(saved.presets) &&
-    saved.presets.every(
-      (p) =>
-        p &&
-        typeof p.name === 'string' &&
-        Array.isArray(p.dice) &&
-        p.dice.every(isValidDie),
-    )
-  )
+  if (!saved || typeof saved !== 'object') return false
+  if (Array.isArray(saved.userPresets)) return isValidPresetList(saved.userPresets)
+  // Legacy v1 blob.
+  return isValidPresetList(saved.presets)
 }
 
 /**
- * Named game presets. Each preset is a saved snapshot of the dice configuration.
- * `activeId` tracks the currently selected preset; `null` means a one-off
- * "Custom" configuration that is not tied to any saved preset.
+ * Build the runtime list of built-in presets, excluding any the user hid.
+ * @param {string[]} hidden - keys of built-ins the user deleted
+ * @returns {{ id: string, key: string, name: string, builtin: true, dice: { sides: number, color: string }[] }[]}
+ */
+const visibleBuiltins = (hidden) =>
+  builtinPresets
+    .filter((b) => !hidden.includes(b.key))
+    .map((b) => ({
+      id: BUILTIN_PREFIX + b.key,
+      key: b.key,
+      name: b.name,
+      builtin: /** @type {true} */ (true),
+      dice: b.dice.map((d) => ({ sides: d.sides, color: d.color || '#ffffff' })),
+    }))
+
+/**
+ * Named game presets. Combines built-in presets (shipped with the app) with
+ * the user's saved presets. Built-ins are reconstructed from source each load;
+ * the only built-in state persisted is which ones the user has hidden
+ * ("deleted"), so they can be restored. `activeId` tracks the currently
+ * selected preset; `null` means a one-off "Custom" configuration.
  * Persisted to localStorage under its own key, separate from the live config.
  */
 class Presets {
   /** @type {{ id: string, name: string, dice: { sides: number, color: string }[] }[]} */
-  presets = $state([])
+  userPresets = $state([])
+
+  /** Keys of built-in presets the user has deleted (hidden). @type {string[]} */
+  hiddenBuiltins = $state([])
 
   /** @type {string | null} */
   activeId = $state(null)
@@ -54,25 +91,42 @@ class Presets {
   constructor() {
     const saved = load(KEY)
     if (isValidBlob(saved)) {
-      this.presets = saved.presets.map((p) => ({
+      // Current shape, or migrate legacy v1 (`presets` -> all user presets).
+      /** @type {{ id?: string, name: string, dice: { sides: number, color: string }[] }[]} */
+      const sourceList = Array.isArray(saved.userPresets)
+        ? saved.userPresets
+        : saved.presets
+      this.userPresets = sourceList.map((p) => ({
         id: makeId(),
         name: p.name,
         dice: p.dice.map((d) => ({ sides: d.sides, color: d.color || '#ffffff' })),
       }))
-      // Only restore the active selection if it still resolves to a real preset.
-      const restored = saved.presets.findIndex((p) => p.id === saved.activeId)
-      this.activeId = restored >= 0 ? this.presets[restored].id : null
+      this.hiddenBuiltins = Array.isArray(saved.hiddenBuiltins)
+        ? saved.hiddenBuiltins.filter((/** @type {any} */ k) => typeof k === 'string')
+        : []
+      // Only restore the active selection if it still resolves to a real
+      // preset. Built-in selections round-trip by their stable key; user
+      // preset ids are regenerated, so match by index into the saved list.
+      if (typeof saved.activeId === 'string') {
+        const userIndex = sourceList.findIndex((p) => p.id === saved.activeId)
+        if (userIndex >= 0) {
+          this.activeId = this.userPresets[userIndex].id
+        } else if (this.presets.some((p) => p.id === saved.activeId)) {
+          this.activeId = saved.activeId
+        }
+      }
     }
 
-    // Auto-persist on any change. Stored ids are stable within a session and
-    // are only used to round-trip the active selection across reloads.
+    // Auto-persist on any change. User preset ids are stable within a session
+    // and are only used to round-trip the active selection across reloads.
     $effect.root(() => {
       $effect(() => {
         save(
           {
-            version: 1,
+            version: 2,
             activeId: this.activeId,
-            presets: this.presets.map((p) => ({
+            hiddenBuiltins: this.hiddenBuiltins,
+            userPresets: this.userPresets.map((p) => ({
               id: p.id,
               name: p.name,
               dice: p.dice.map((d) => ({ sides: d.sides, color: d.color })),
@@ -82,6 +136,20 @@ class Presets {
         )
       })
     })
+  }
+
+  /**
+   * The full preset list shown to the user: saved presets first, then the
+   * visible (non-hidden) built-ins.
+   * @returns {{ id: string, key?: string, name: string, builtin?: boolean, dice: { sides: number, color: string }[] }[]}
+   */
+  get presets() {
+    return [...this.userPresets, ...visibleBuiltins(this.hiddenBuiltins)]
+  }
+
+  /** Whether any built-in preset is currently hidden (so it can be restored). */
+  get hasHiddenBuiltins() {
+    return this.hiddenBuiltins.length > 0
   }
 
   /** @returns {{ id: string, name: string, dice: { sides: number, color: string }[] } | null} */
@@ -118,17 +186,30 @@ class Presets {
     const trimmed = name.trim()
     if (!trimmed) return
     const preset = { id: makeId(), name: trimmed, dice: snapshotDice() }
-    this.presets.push(preset)
+    this.userPresets.push(preset)
     this.activeId = preset.id
   }
 
   /**
-   * Remove a preset. If it was active, fall back to Custom.
+   * Remove a preset. Built-ins are hidden (and can be restored) rather than
+   * truly deleted; user presets are removed outright. The id's namespace
+   * (`builtin:` prefix) determines which kind it is. If it was active, fall
+   * back to Custom.
    * @param {string} id
    */
   remove(id) {
-    this.presets = this.presets.filter((p) => p.id !== id)
+    if (id.startsWith(BUILTIN_PREFIX)) {
+      const key = id.slice(BUILTIN_PREFIX.length)
+      if (!this.hiddenBuiltins.includes(key)) this.hiddenBuiltins.push(key)
+    } else {
+      this.userPresets = this.userPresets.filter((p) => p.id !== id)
+    }
     if (this.activeId === id) this.activeId = null
+  }
+
+  /** Restore all hidden built-in presets. */
+  restoreBuiltins() {
+    this.hiddenBuiltins = []
   }
 }
 

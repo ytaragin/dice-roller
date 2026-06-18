@@ -50,6 +50,10 @@
   function deletePreset(id) {
     presets.remove(id)
   }
+
+  function restorePresets() {
+    presets.restoreBuiltins()
+  }
 </script>
 
 <section>
@@ -58,6 +62,7 @@
     onSelectCustom={selectCustom}
     onSave={savePreset}
     onDelete={deletePreset}
+    onRestore={restorePresets}
   />
 
   {#each config.dice as die, i (die.id)}

@@ -5,12 +5,13 @@
    * @property {() => void} onSelectCustom - switch to a one-off custom config
    * @property {(name: string) => void} onSave - save current dice as a named preset
    * @property {(id: string) => void} onDelete - delete a preset by id
+   * @property {() => void} onRestore - restore all hidden built-in presets
    */
 
   import { presets } from '../state/presets.svelte.js'
 
   /** @type {Props} */
-  let { onSelect, onSelectCustom, onSave, onDelete } = $props()
+  let { onSelect, onSelectCustom, onSave, onDelete, onRestore } = $props()
 
   let saving = $state(false)
   let name = $state('')
@@ -54,6 +55,12 @@
     <button class="action" onclick={startSave}>Save as preset</button>
   {/if}
 </div>
+
+{#if presets.hasHiddenBuiltins}
+  <div class="bar">
+    <button class="action" onclick={onRestore}>Restore built-in presets</button>
+  </div>
+{/if}
 
 {#if saving}
   <div class="save-row">

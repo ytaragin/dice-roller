@@ -113,28 +113,49 @@ export const config = new Config()   // singleton
 Named dice configurations ("games") the user can save and reload. Persisted to
 `localStorage` under its own key (`dice-presets`), separate from the live config.
 
+The list shown to the user combines two sources:
+
+- **Built-in presets** shipped with the app, defined in
+  [`lib/builtinPresets.js`](./src/lib/builtinPresets.js). To add one, append an
+  object `{ key, name, dice: [{ sides, color }] }` to that array; `key` must be
+  a stable, never-reused string id. Built-ins are reconstructed from source on
+  every load (not stored as user data), so edits/additions propagate to all
+  users.
+- **User presets** the user saves at runtime (full data persisted).
+
+User presets are listed first, then the visible built-ins. A user can "delete" a
+built-in — it is **hidden** (its `key` is added to `hiddenBuiltins`) rather than
+truly removed — and restore the full built-in set via `restoreBuiltins()`.
+
 ```js
-// one preset:
-{ id, name, dice: [{ sides, color }, ...] }
+// one preset (runtime, combined list):
+{ id, name, dice: [{ sides, color }, ...], builtin? }
 
 class Presets {
-  presets  = $state([])            // saved presets
-  activeId = $state(null)          // selected preset id, or null = "Custom"
+  userPresets    = $state([])      // saved presets (persisted)
+  hiddenBuiltins = $state([])      // keys of deleted built-ins (persisted)
+  activeId       = $state(null)    // selected preset id, or null = "Custom"
 
-  get active() { ... }             // the selected preset object, or null
+  get presets()           // userPresets first, then non-hidden built-ins
+  get active() { ... }    // the selected preset object, or null
+  get hasHiddenBuiltins() // any built-in currently hidden?
   select(id)        // load preset's dice into config + mark active
   selectCustom()    // switch to Custom (keeps current dice)
   markCustom()      // drop active selection because dice were edited
-  saveCurrentAs(name) // snapshot config.dice into a new named preset
-  remove(id)        // delete a preset; falls back to Custom if it was active
+  saveCurrentAs(name) // snapshot config.dice into a new user preset
+  remove(id)        // built-in → hide it; user preset → delete it
+  restoreBuiltins() // un-hide all built-ins
 }
 export const presets = new Presets()   // singleton
 ```
 
 `activeId === null` means the live config is a one-off **Custom** setup not tied
-to any saved preset. Preset `id`s are stable within a session and are persisted
-only to round-trip the active selection across reloads; on load the active
-selection is restored only if it still resolves to an existing preset.
+to any saved preset. User preset `id`s are regenerated each load; built-in
+selections round-trip by their stable `key`. The active selection is restored on
+load only if it still resolves to an existing preset. The persisted blob is
+`{ version: 2, activeId, hiddenBuiltins, userPresets }`; legacy v1 blobs
+(`{ version: 1, presets }`) are migrated so all entries become user presets.
+
 
 ### Dice store — `state/dice.svelte.js`
 
