@@ -120,12 +120,10 @@ The list shown to the user combines two sources:
   object `{ key, name, dice: [{ sides, color }] }` to that array; `key` must be
   a stable, never-reused string id. Built-ins are reconstructed from source on
   every load (not stored as user data), so edits/additions propagate to all
-  users.
+  users. Built-ins are **not deletable**.
 - **User presets** the user saves at runtime (full data persisted).
 
-User presets are listed first, then the visible built-ins. A user can "delete" a
-built-in — it is **hidden** (its `key` is added to `hiddenBuiltins`) rather than
-truly removed — and restore the full built-in set via `restoreBuiltins()`.
+User presets are listed first, then the built-ins.
 
 ```js
 // one preset (runtime, combined list):
@@ -133,19 +131,16 @@ truly removed — and restore the full built-in set via `restoreBuiltins()`.
 
 class Presets {
   userPresets    = $state([])      // saved presets (persisted)
-  hiddenBuiltins = $state([])      // keys of deleted built-ins (persisted)
   activeId       = $state(null)    // selected preset id, or null = "Custom"
   customDice     = $state([])      // last one-off Custom dice (persisted)
 
-  get presets()           // userPresets first, then non-hidden built-ins
+  get presets()           // userPresets first, then built-ins
   get active() { ... }    // the selected preset object, or null
-  get hasHiddenBuiltins() // any built-in currently hidden?
   select(id)        // remember current dice if Custom, then load preset's dice + mark active
   selectCustom()    // restore last remembered Custom dice (if any), mark Custom
   markCustom()      // drop active selection because dice were edited
   saveCurrentAs(name) // snapshot config.dice into a new user preset
-  remove(id)        // built-in → hide it; user preset → delete it
-  restoreBuiltins() // un-hide all built-ins
+  remove(id)        // delete a user preset (built-ins are ignored)
 }
 export const presets = new Presets()   // singleton
 ```
@@ -156,12 +151,10 @@ to any saved preset. When the user switches away from Custom to a preset,
 `selectCustom()` restores that snapshot, so an in-progress Custom setup survives
 a round-trip through presets. `customDice` is empty until the user has been in
 Custom mode at least once (then `selectCustom()` just keeps the current dice).
-User preset `id`s are regenerated each load; built-in
-selections round-trip by their stable `key`. The active selection is restored on
-load only if it still resolves to an existing preset. The persisted blob is
-`{ version: 2, activeId, hiddenBuiltins, customDice, userPresets }`; legacy v1
-blobs (`{ version: 1, presets }`) are migrated so all entries become user
-presets.
+User preset `id`s are persisted and stable across reloads; built-in ids derive
+from their stable `key`. The active selection is restored on load only if it
+still resolves to an existing preset. The persisted blob is
+`{ version: 2, activeId, customDice, userPresets }`.
 
 
 ### Dice store — `state/dice.svelte.js`
@@ -242,4 +235,5 @@ reconciliation.
 5. **Presets vs. Custom.** Editing any die (sides/color/add/remove) calls
    `presets.markCustom()`, so the live config detaches from the selected preset
    instead of mutating it. A preset only changes when explicitly re-saved. This
-   keeps saved "games" stable while allowing quick one-off tweaks.
+   keeps saved "games" stable while allowing quick one-off tweaks. Built-in
+   presets are non-deletable; user presets can be deleted.
